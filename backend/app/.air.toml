@@ -1,0 +1,5 @@
+[build]
+cmd = "go build -o tmp/main ."
+
+# Enable polling (useful for Docker on macOS/Windows)
+poll = true

@@ -1,0 +1,618 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Webverse Infrastructure Stack
+
+Parameters:
+  CertificateArn:
+    Type: String
+    Description: ACM Certificate ARN for HTTPS
+
+Resources:
+
+  ####################
+  # VPC & Subnets
+  ####################
+  WebverseVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/20
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: webverse-vpc
+
+  WebverseIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: webverse-igw
+
+  WebverseVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref WebverseVPC
+      InternetGatewayId: !Ref WebverseIGW
+
+  # Public Subnets
+  WebverseSubnetPublicAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.0.0/27
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-public-az1
+
+  WebverseSubnetPublicAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.0.32/27
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-public-az2
+
+  WebverseSubnetPublicAZ3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.0.64/27
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-public-az3
+
+  # Private Subnets
+  WebverseSubnetPrivateAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-private-az1
+
+  WebverseSubnetPrivateAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-private-az2
+
+  WebverseSubnetPrivateAZ3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref WebverseVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: webverse-subnet-private-az3
+
+  ####################
+  # NAT Gateway
+  ####################
+  WebverseRegionalNAT:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      VpcId: !Ref WebverseVPC
+      AvailabilityMode: regional
+      ConnectivityType: public
+      Tags:
+        - Key: Name
+          Value: webverse-nat-regional
+
+  ####################
+  # Route Tables
+  ####################
+  WebverseRTPublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref WebverseVPC
+      Tags:
+        - Key: Name
+          Value: webverse-rt-public
+
+  WebverseRTPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref WebverseRTPublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref WebverseIGW
+
+  WebverseRTPublicAZ1Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPublicAZ1
+      RouteTableId: !Ref WebverseRTPublic
+
+  WebverseRTPublicAZ2Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPublicAZ2
+      RouteTableId: !Ref WebverseRTPublic
+
+  WebverseRTPublicAZ3Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPublicAZ3
+      RouteTableId: !Ref WebverseRTPublic
+
+  WebverseRTPrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref WebverseVPC
+      Tags:
+        - Key: Name
+          Value: webverse-rt-private
+
+  WebverseRTPrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref WebverseRTPrivate
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref WebverseRegionalNAT
+
+  WebverseRTPrivateAZ1Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPrivateAZ1
+      RouteTableId: !Ref WebverseRTPrivate
+
+  WebverseRTPrivateAZ2Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPrivateAZ2
+      RouteTableId: !Ref WebverseRTPrivate
+
+  WebverseRTPrivateAZ3Assoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WebverseSubnetPrivateAZ3
+      RouteTableId: !Ref WebverseRTPrivate
+
+  ####################
+  # VPC Gateway Endpoint - DynamoDB
+  ####################
+  WebverseVPCEndpointDynamoDB:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.dynamodb
+      VpcId: !Ref WebverseVPC
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref WebverseRTPrivate
+
+  ####################
+  # DynamoDB
+  ####################
+  WebverseDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Webverse
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: Layer
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI_UserStrokes
+          KeySchema:
+            - AttributeName: UserId
+              KeyType: HASH
+            - AttributeName: Layer
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+
+  ####################
+  # SQS
+  ####################
+  DeleteUserStrokesQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: DeleteUserStrokesQueue
+      KmsMasterKeyId: alias/aws/sqs
+
+  ####################
+  # ElastiCache
+  ####################
+  WebverseElasticacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for Webverse ElastiCache
+      SubnetIds:
+        - !Ref WebverseSubnetPrivateAZ1
+        - !Ref WebverseSubnetPrivateAZ2
+        - !Ref WebverseSubnetPrivateAZ3
+      CacheSubnetGroupName: webverse-elasticache-subnet-group
+
+  WebverseElastiCacheServerless:
+    Type: AWS::ElastiCache::ServerlessCache
+    Properties:
+      ServerlessCacheName: webverse-elasticache
+      Engine: valkey
+      SubnetIds:
+        - !Ref WebverseSubnetPrivateAZ1
+        - !Ref WebverseSubnetPrivateAZ2
+        - !Ref WebverseSubnetPrivateAZ3
+      SecurityGroupIds:
+        - !Ref WebverseSGElasticache
+
+  ####################
+  # SSM Parameters
+  ####################
+  SSMRedisEndpoint:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /webverse/REDIS_ENDPOINT
+      Type: String
+      Value: !Sub "${WebverseElastiCacheServerless.Endpoint.Address}:6379"
+
+  ####################
+  # Security Groups
+  ####################
+  WebverseSGALB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: webverse-sg-alb
+      VpcId: !Ref WebverseVPC
+      GroupDescription: Security group for the Webverse ALB
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  WebverseSGECS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: webverse-sg-ecs
+      VpcId: !Ref WebverseVPC
+      GroupDescription: Security group for the Webverse ECS
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  WebverseSGElasticache:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: webverse-sg-elasticache
+      VpcId: !Ref WebverseVPC
+      GroupDescription: Security group for the Webverse Elasticache
+
+  # Security Group Rules - added separately to avoid circular dependencies
+  WebverseSGALBEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref WebverseSGALB
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      DestinationSecurityGroupId: !Ref WebverseSGECS
+
+  WebverseSGECSIngressFromALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref WebverseSGECS
+      IpProtocol: tcp
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref WebverseSGALB
+
+  WebverseSGECSIngressFromSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref WebverseSGECS
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref WebverseSGECS
+
+  WebverseSGECSIngressFromALBHTTPS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref WebverseSGECS
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref WebverseSGALB
+
+  WebverseSGECSEgressToRedis:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref WebverseSGECS
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6380
+      DestinationSecurityGroupId: !Ref WebverseSGElasticache
+
+  WebverseSGElasticacheIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref WebverseSGElasticache
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6380
+      SourceSecurityGroupId: !Ref WebverseSGECS
+
+  ####################
+  # ECS Cluster & Roles
+  ####################
+  WebverseECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/webverse-ecs-fargate-task
+      RetentionInDays: 7
+
+  WebverseECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: webverse-ecs-fargate-cluster
+      Tags:
+        - Key: env
+          Value: prod
+
+  WebverseECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: webverse-ecs-task-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess_v2
+        - arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+
+  WebverseECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: webverse-ecs-task-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+
+  ####################
+  # ECS Task Definition
+  ####################
+  WebverseECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: webverse-ecs-fargate-task
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt WebverseECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt WebverseECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: webverse
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/webverse:latest"
+          Cpu: 512
+          Memory: 1024
+          PortMappings:
+            - ContainerPort: 8080
+              Protocol: tcp
+              Name: container-port-http
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WebverseECSLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: webverse-ecs
+          Secrets:
+            - Name: DEV_MODE
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/DEV_MODE"
+            - Name: EXTENSION_ID
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/EXTENSION_ID"
+            - Name: GOOGLE_CLIENT_ID
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/GOOGLE_CLIENT_ID"
+            - Name: GOOGLE_CLIENT_SECRET
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/GOOGLE_CLIENT_SECRET"
+            - Name: GITHUB_CLIENT_ID
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/GITHUB_CLIENT_ID"
+            - Name: GITHUB_CLIENT_SECRET
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/GITHUB_CLIENT_SECRET"
+            - Name: JWT_SECRET
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/JWT_SECRET"
+            - Name: REDIS_ENDPOINT
+              ValueFrom: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/webverse/REDIS_ENDPOINT"
+          HealthCheck:
+            Command: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+            Interval: 30
+            Timeout: 5
+            StartPeriod: 10
+            Retries: 3
+
+  ####################
+  # ALB
+  ####################
+  WebverseALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: webverse-alb
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref WebverseSGALB
+      Subnets:
+        - !Ref WebverseSubnetPublicAZ1
+        - !Ref WebverseSubnetPublicAZ2
+        - !Ref WebverseSubnetPublicAZ3
+      Type: application
+
+  WebverseALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: webverse-alb-target-group
+      Port: 8080
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref WebverseVPC
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /health
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+
+  WebverseALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref WebverseALB
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebverseALBTargetGroup
+
+  ####################
+  # ECS Service
+  ####################
+  WebverseECSService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - WebverseALBListener
+    Properties:
+      Cluster: !Ref WebverseECSCluster
+      ServiceName: webverse-ecs-fargate-service
+      TaskDefinition: !Ref WebverseECSTaskDefinition
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: 2
+      HealthCheckGracePeriodSeconds: 10
+      EnableECSManagedTags: true
+      EnableExecuteCommand: true
+      PlatformVersion: LATEST
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref WebverseSGECS
+          Subnets:
+            - !Ref WebverseSubnetPrivateAZ1
+            - !Ref WebverseSubnetPrivateAZ2
+            - !Ref WebverseSubnetPrivateAZ3
+      LoadBalancers:
+        - TargetGroupArn: !Ref WebverseALBTargetGroup
+          ContainerName: webverse
+          ContainerPort: 8080
+
+  ####################
+  # ECS Auto Scaling
+  ####################
+  WebverseECSScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 2
+      ResourceId: !Sub 
+        - "service/${ClusterName}/${ServiceName}"
+        - ClusterName: !Ref WebverseECSCluster
+          ServiceName: !GetAtt WebverseECSService.Name
+      RoleARN: !GetAtt WebverseECSServiceScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  WebverseECSServiceScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: webverse-ecs-auto-scaling-policy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref WebverseECSScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 50.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  WebverseECSServiceScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: webverse-ecs-service-scaling-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AutoScalingFullAccess
+
+  ####################
+  # WAFv2 Web ACL
+  ####################
+  WebverseWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: webverse-web-acl
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: webverse-waf
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: rate-limiter
+          Priority: 1
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+              EvaluationWindowSec: 60
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: rate-limiter
+            SampledRequestsEnabled: true
+  
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !GetAtt WebverseALB.LoadBalancerArn
+      WebACLArn: !GetAtt WebverseWebACL.Arn
+
+Outputs:
+  ALBDNS:
+    Description: Webverse ALB DNS Name
+    Value: !GetAtt WebverseALB.DNSName
