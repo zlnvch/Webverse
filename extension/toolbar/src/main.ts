@@ -194,6 +194,13 @@ window.addEventListener('message', (event) => {
   if (event.data.type === WindowMessageType.WEBVERSE_CREATE_TOOLBAR) {
     const toolbarState = event.data.payload?.toolbarState;
     createToolbar(toolbarState);
+  } else if (event.data.type === WindowMessageType.WEBVERSE_UPDATE_TOOLBAR) {
+    const toolbarState = event.data.payload?.toolbarState;
+    if (toolbarState && currentApp) {
+      // Toolbar already exists, just update the state
+      const store = useToolbarStore();
+      store.restoreToolbarState(toolbarState);
+    }
   }
 });
 

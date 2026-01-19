@@ -2,6 +2,7 @@ import { DrawingEngine } from '../DrawingEngine';
 import { setupEventListeners } from './EventManager';
 import { normalizePageUrl } from '@shared/utils';
 import { TabLifecycleMessageType } from '@shared/messageTypes';
+import { URLChangeDetector } from './URLChangeDetector';
 
 async function notifyContentScriptReady(): Promise<void> {
   try {
@@ -20,6 +21,7 @@ async function notifyContentScriptReady(): Promise<void> {
 
 export class LifecycleManager {
   private drawingEngine: DrawingEngine | null = null;
+  private urlDetector: URLChangeDetector | null = null;
   private isLaunched = false;
 
   constructor(
@@ -30,6 +32,10 @@ export class LifecycleManager {
   async init(): Promise<void> {
     // Always notify background that content script is ready (for tab tracking)
     await notifyContentScriptReady();
+
+    // Initialize URL change detector for SPA navigation
+    this.urlDetector = new URLChangeDetector();
+    this.urlDetector.start();
 
     // Only create drawingEngine if it doesn't exist
     if (!this.drawingEngine) {
@@ -42,6 +48,12 @@ export class LifecycleManager {
   }
 
   destroy(): void {
+    // Stop URL change detector
+    if (this.urlDetector) {
+      this.urlDetector.stop();
+      this.urlDetector = null;
+    }
+
     if (this.drawingEngine) {
       const canvas = this.drawingEngine.getCanvas();
       canvas.remove();
@@ -66,6 +78,11 @@ export class LifecycleManager {
     this.drawingEngine = new DrawingEngine();
     setupEventListeners(this.drawingEngine);
     this.isLaunched = true;
+
+    // Reset URL detector to current page to avoid duplicate change detection
+    if (this.urlDetector) {
+      this.urlDetector.updateUrl(window.location.href);
+    }
 
     // Notify background that content script is ready (for tab tracking)
     notifyContentScriptReady();

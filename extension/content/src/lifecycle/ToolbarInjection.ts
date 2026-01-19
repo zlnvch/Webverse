@@ -11,9 +11,26 @@ let moduleLoadedReceived = false;
 // Store pending toolbar state to pass on creation
 let pendingToolbarState: ToolbarState | null = null;
 
-export function injectToolbar(toolbarState?: ToolbarState | null): void {
-  // Remove any existing toolbar
+export function injectToolbar(toolbarState?: ToolbarState | null, forceReinject: boolean = false): void {
   const existingContainer = document.getElementById(TOOLBAR_CONTAINER_ID);
+
+  // If toolbar exists and we're not forcing a reinject, just update state
+  if (existingContainer && !forceReinject) {
+    // Update toolbar state without removing/recreating
+    if (toolbarState) {
+      pendingToolbarState = toolbarState;
+      // Send UPDATE message to existing toolbar
+      window.postMessage({
+        type: WindowMessageType.WEBVERSE_UPDATE_TOOLBAR,
+        payload: {
+          toolbarState: pendingToolbarState
+        }
+      }, '*');
+    }
+    return;
+  }
+
+  // Remove any existing toolbar (if forceReinject or we need to create fresh)
   if (existingContainer) {
     existingContainer.remove();
   }

@@ -30,6 +30,9 @@ export enum TabLifecycleMessageType {
   /** Background triggers relaunch after page navigation */
   RELAUNCH_WEBVERSE_ON_NAVIGATION = 'RELAUNCH_WEBVERSE_ON_NAVIGATION',
 
+  /** Content script detects SPA URL change via polling */
+  SPA_URL_CHANGED = 'SPA_URL_CHANGED',
+
   /** Get encryption key version for current tab */
   GET_TAB_KEY_VERSION = 'GET_TAB_KEY_VERSION',
 
@@ -239,6 +242,9 @@ export enum WindowMessageType {
 
   /** Content script → Toolbar: Create toolbar instance */
   WEBVERSE_CREATE_TOOLBAR = 'WEBVERSE_CREATE_TOOLBAR',
+
+  /** Content script → Toolbar: Update toolbar state without recreating */
+  WEBVERSE_UPDATE_TOOLBAR = 'WEBVERSE_UPDATE_TOOLBAR',
 
   /** Toolbar → Content: Toolbar module loaded and ready */
   WEBVERSE_TOOLBAR_MODULE_LOADED = 'WEBVERSE_TOOLBAR_MODULE_LOADED',

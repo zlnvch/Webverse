@@ -123,6 +123,18 @@ export class ChromeMessageHandler {
     this.onRelaunch();
     this.onInjectToolbar();
 
+    // Load strokes for the new page
+    // Need to import dynamically to avoid circular dependency
+    import('./WebSocketForwarder').then(({ sendLoadAndSubscribe, forwardToWebSocket }) => {
+      const pageToLoad = pageKey || window.location.href;
+      const layerToLoad = layer !== undefined ? layer : 0;
+      const layerIdToLoad = layerId || '';
+
+      sendLoadAndSubscribe(pageToLoad, layerToLoad, layerIdToLoad, forwardToWebSocket);
+    }).catch(() => {
+      // Silently suppress errors
+    });
+
     sendResponse({ success: true });
   }
 

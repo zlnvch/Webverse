@@ -321,3 +321,63 @@ export async function handleGetTabKeyVersion(message: any, sender: any, sendResp
   }
   return true;
 }
+
+// Handle SPA URL change detected by content script polling
+export async function handleSPAUrlChanged(message: any, sender: any, sendResponse: (response?: any) => void) {
+  const tabId = sender.tab?.id;
+  if (!tabId) {
+    sendResponse({ success: false });
+    return true;
+  }
+
+  const { oldUrl, newUrl, pageKey } = message;
+
+  // Check if this is a tracked tab
+  const trackedTab = await tabTracking.getTrackedTab(tabId);
+  if (!trackedTab) {
+    sendResponse({ success: false });
+    return true;
+  }
+
+  // Double-check that the page has actually changed
+  // (onUpdated might have already handled it, or this could be a duplicate)
+  if (newUrl === trackedTab.pageKey) {
+    sendResponse({ success: true, alreadyHandled: true });
+    return true;
+  }
+
+  // Unsubscribe from old page if this is the last tab on that page
+  await tabTracking.maybeUnsubscribeFromPage(trackedTab.pageKey, tabId);
+
+  // For Private layer, compute HMAC pageKey before updating tracked tab
+  let pageKeyForTracking = newUrl;
+  if (trackedTab.layer === 1 && trackedTab.layerId) {
+    const { DEK2 } = await chrome.storage.session.get('DEK2');
+    if (DEK2) {
+      const DEK2Bytes = encryption.base64ToUint8Array(DEK2);
+      const pageKeyBytes = encryption.computeHMACPageKey(DEK2Bytes, newUrl);
+      pageKeyForTracking = encryption.uint8ArrayToBase64(pageKeyBytes);
+    }
+  }
+
+  // Update tracked tab with new page key (HMAC for private layer, normalized URL for public)
+  await tabTracking.updateTrackedTabPage(tabId, pageKeyForTracking);
+
+  // Get toolbar state from trackedTabs
+  const trackedTabData = await tabTracking.getTrackedTab(tabId);
+  const toolbarState = trackedTabData?.toolbarState || null;
+
+  // Send message to content script to re-launch toolbar on the new page with toolbar state
+  chrome.tabs.sendMessage(tabId, {
+    type: TabLifecycleMessageType.RELAUNCH_WEBVERSE_ON_NAVIGATION,
+    toolbarState,
+    pageKey: pageKeyForTracking,  // Use the HMAC (or normalized URL for public)
+    layer: trackedTab.layer,
+    layerId: trackedTab.layerId
+  }).catch(() => {
+    // Tab might have been closed or navigated away
+  });
+
+  sendResponse({ success: true });
+  return true;
+}

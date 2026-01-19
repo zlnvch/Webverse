@@ -22,6 +22,7 @@ const TAB_MESSAGE_TYPES = new Set([
   TabLifecycleMessageType.TOOLBAR_OPENED,
   TabLifecycleMessageType.TOOLBAR_CLOSED,
   TabLifecycleMessageType.GET_TAB_KEY_VERSION,
+  TabLifecycleMessageType.SPA_URL_CHANGED,
   UtilityMessageType.SAVE_TOOLBAR_STATE,
 ]);
 
@@ -127,6 +128,8 @@ async function routeTabMessage(message: any, sender: any, sendResponse: (respons
       return await tabLifecycle.handleSaveToolbarState(message, sender, sendResponse);
     case TabLifecycleMessageType.GET_TAB_KEY_VERSION:
       return await tabLifecycle.handleGetTabKeyVersion(message, sender, sendResponse);
+    case TabLifecycleMessageType.SPA_URL_CHANGED:
+      return await tabLifecycle.handleSPAUrlChanged(message, sender, sendResponse);
     default:
       return false;
   }
