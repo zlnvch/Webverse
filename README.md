@@ -1,12 +1,14 @@
 <div align="center">
 
 <img src="logo.png" alt="Webverse" width="400"/>
-
-***
+<br><br>
 
 *The collaborative canvas to annotate the web*
 
+***
 </div>
+
+**[Available on the Chrome Web Store →](https://chromewebstore.google.com/detail/webverse/jidcapjifndjlhnaloaokpeeehbaeadl)**
 
 ## What is Webverse?
 

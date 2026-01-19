@@ -1,6 +1,6 @@
 {
   "name": "webverse",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Webverse is the collaborative canvas to annotate the web. Draw together in real time. Public, private, and shared spaces.",
   "type": "module",
   "engines": {
