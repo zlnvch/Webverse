@@ -541,10 +541,12 @@ This builds the backend Docker image, pushes it to ECR, and exports your `.env.p
 
 1. Go to AWS CloudFormation in the target region
 2. Click "Create stack" → "With new resources"
-3. Upload `backend/webverse-stack.yml`
+3. Upload `backend/webverse-stack.yml` (or `backend/webverse-stack-single-az.yml` for a cheaper, single-AZ deployment)
 4. Stack name: `webverse-infrastructure`
 5. Required parameter: ACM Certificate ARN (from step 8)
 6. Click "Create stack"
+
+> **Tip**: The `webverse-stack-single-az.yml` template is optimized for lower costs. It uses a single Availability Zone, a single-node ElastiCache instance (`t3.micro`) instead of serverless, and reduced ECS task counts. This is ideal for development, testing, or low-traffic personal use.
 
 Wait for stack creation to complete. The Outputs section will show the ALB DNS name.
 

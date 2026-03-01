@@ -34,7 +34,7 @@ Resources:
       VpcId: !Ref WebverseVPC
       InternetGatewayId: !Ref WebverseIGW
 
-  # Public Subnets
+  # Public Subnet (Single AZ - Primary)
   WebverseSubnetPublicAZ1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -46,6 +46,8 @@ Resources:
         - Key: Name
           Value: webverse-subnet-public-az1
 
+  # Public Subnet (ALB Requirement - Dummy)
+  # This subnet is unused by our resources and exists only to satisfy ALB's requirement for 2 Availability Zones.
   WebverseSubnetPublicAZ2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -57,18 +59,7 @@ Resources:
         - Key: Name
           Value: webverse-subnet-public-az2
 
-  WebverseSubnetPublicAZ3:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref WebverseVPC
-      CidrBlock: 10.0.0.64/27
-      AvailabilityZone: !Select [2, !GetAZs ""]
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: webverse-subnet-public-az3
-
-  # Private Subnets
+  # Private Subnet (Single AZ)
   WebverseSubnetPrivateAZ1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -79,38 +70,26 @@ Resources:
         - Key: Name
           Value: webverse-subnet-private-az1
 
-  WebverseSubnetPrivateAZ2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref WebverseVPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: webverse-subnet-private-az2
-
-  WebverseSubnetPrivateAZ3:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref WebverseVPC
-      CidrBlock: 10.0.3.0/24
-      AvailabilityZone: !Select [2, !GetAZs ""]
-      Tags:
-        - Key: Name
-          Value: webverse-subnet-private-az3
-
   ####################
   # NAT Gateway
   ####################
-  WebverseRegionalNAT:
+  WebverseNATGateway:
     Type: AWS::EC2::NatGateway
     Properties:
-      VpcId: !Ref WebverseVPC
-      AvailabilityMode: regional
+      SubnetId: !Ref WebverseSubnetPublicAZ1
       ConnectivityType: public
+      AllocationId: !GetAtt WebverseElasticIP.AllocationId
       Tags:
         - Key: Name
-          Value: webverse-nat-regional
+          Value: webverse-nat-gateway
+
+  WebverseElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: webverse-nat-eip
 
   ####################
   # Route Tables
@@ -142,12 +121,6 @@ Resources:
       SubnetId: !Ref WebverseSubnetPublicAZ2
       RouteTableId: !Ref WebverseRTPublic
 
-  WebverseRTPublicAZ3Assoc:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref WebverseSubnetPublicAZ3
-      RouteTableId: !Ref WebverseRTPublic
-
   WebverseRTPrivate:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -161,24 +134,12 @@ Resources:
     Properties:
       RouteTableId: !Ref WebverseRTPrivate
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref WebverseRegionalNAT
+      NatGatewayId: !Ref WebverseNATGateway
 
   WebverseRTPrivateAZ1Assoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref WebverseSubnetPrivateAZ1
-      RouteTableId: !Ref WebverseRTPrivate
-
-  WebverseRTPrivateAZ2Assoc:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref WebverseSubnetPrivateAZ2
-      RouteTableId: !Ref WebverseRTPrivate
-
-  WebverseRTPrivateAZ3Assoc:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref WebverseSubnetPrivateAZ3
       RouteTableId: !Ref WebverseRTPrivate
 
   ####################
@@ -245,21 +206,23 @@ Resources:
       Description: Subnet group for Webverse ElastiCache
       SubnetIds:
         - !Ref WebverseSubnetPrivateAZ1
-        - !Ref WebverseSubnetPrivateAZ2
-        - !Ref WebverseSubnetPrivateAZ3
       CacheSubnetGroupName: webverse-elasticache-subnet-group
 
-  WebverseElastiCacheServerless:
-    Type: AWS::ElastiCache::ServerlessCache
+  WebverseElastiCacheReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
     Properties:
-      ServerlessCacheName: webverse-elasticache
-      Engine: valkey
-      SubnetIds:
-        - !Ref WebverseSubnetPrivateAZ1
-        - !Ref WebverseSubnetPrivateAZ2
-        - !Ref WebverseSubnetPrivateAZ3
+      ReplicationGroupDescription: Webverse Redis cluster
+      ReplicationGroupId: webverse-redis
+      CacheNodeType: cache.t3.micro
+      Engine: redis
+      EngineVersion: 7.1
+      NumCacheClusters: 1
+      AutomaticFailoverEnabled: false
+      CacheSubnetGroupName: !Ref WebverseElasticacheSubnetGroup
       SecurityGroupIds:
         - !Ref WebverseSGElasticache
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
 
   ####################
   # SSM Parameters
@@ -269,7 +232,7 @@ Resources:
     Properties:
       Name: /webverse/REDIS_ENDPOINT
       Type: String
-      Value: !Sub "${WebverseElastiCacheServerless.Endpoint.Address}:6379"
+      Value: !Sub "${WebverseElastiCacheReplicationGroup.PrimaryEndPoint.Address}:6379"
 
   ####################
   # Security Groups
@@ -472,7 +435,6 @@ Resources:
       Subnets:
         - !Ref WebverseSubnetPublicAZ1
         - !Ref WebverseSubnetPublicAZ2
-        - !Ref WebverseSubnetPublicAZ3
       Type: application
 
   WebverseALBTargetGroup:
@@ -517,7 +479,7 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 100
-      DesiredCount: 2
+      DesiredCount: 1
       HealthCheckGracePeriodSeconds: 10
       EnableECSManagedTags: true
       EnableExecuteCommand: true
@@ -529,8 +491,6 @@ Resources:
             - !Ref WebverseSGECS
           Subnets:
             - !Ref WebverseSubnetPrivateAZ1
-            - !Ref WebverseSubnetPrivateAZ2
-            - !Ref WebverseSubnetPrivateAZ3
       LoadBalancers:
         - TargetGroupArn: !Ref WebverseALBTargetGroup
           ContainerName: webverse
@@ -543,8 +503,8 @@ Resources:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
       MaxCapacity: 10
-      MinCapacity: 2
-      ResourceId: !Sub 
+      MinCapacity: 1
+      ResourceId: !Sub
         - "service/${ClusterName}/${ServiceName}"
         - ClusterName: !Ref WebverseECSCluster
           ServiceName: !GetAtt WebverseECSService.Name
